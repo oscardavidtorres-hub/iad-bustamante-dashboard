@@ -11,43 +11,32 @@ const CORS = {
   'Content-Type': 'application/json'
 };
 
+// Valores reales de inmigration_status en HubSpot IAD
+const STATUS_P3      = 'P 3';
+const STATUS_P5      = 'P5. Otros';
+const STATUS_VENDIDO = 'Vendido';
+// P1 = Aplica (comercial calificado)
+const isP1 = (v) => v && v.startsWith('P1.');
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
   const { since, until } = event.queryStringParameters || {};
-  if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros since/until' }) };
+  if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros' }) };
 
   try {
-    const sinceMs = new Date(since + 'T00:00:00-05:00').getTime();
-    const untilMs = new Date(until + 'T23:59:59-05:00').getTime();
+    const sinceMs = new Date(since + 'T00:00:00').getTime();
+    const untilMs = new Date(until + 'T23:59:59').getTime();
 
     const body = {
       filterGroups: [{
         filters: [
-          {
-            propertyName: 'id_de_pauta_conversacion__picallex',
-            operator: 'HAS_PROPERTY'
-          },
-          {
-            propertyName: 'createdate',
-            operator: 'GTE',
-            value: sinceMs.toString()
-          },
-          {
-            propertyName: 'createdate',
-            operator: 'LTE',
-            value: untilMs.toString()
-          }
+          { propertyName: 'id_de_pauta_conversacion__picallex', operator: 'HAS_PROPERTY' },
+          { propertyName: 'createdate', operator: 'GTE', value: String(sinceMs) },
+          { propertyName: 'createdate', operator: 'LTE', value: String(untilMs) }
         ]
       }],
-      properties: [
-        'createdate',
-        'estatus_inmigracion_comercial',
-        'p3',
-        'p5',
-        'vendido',
-        'id_de_pauta_conversacion__picallex'
-      ],
+      properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
       limit: 200,
       sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }]
     };
@@ -68,8 +57,8 @@ exports.handler = async (event) => {
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`HubSpot ${res.status}: ${errText.substring(0, 400)}`);
+        const txt = await res.text();
+        throw new Error(`HubSpot ${res.status}: ${txt.substring(0, 400)}`);
       }
 
       const json = await res.json();
@@ -84,11 +73,11 @@ exports.handler = async (event) => {
     let comercial = 0, p3 = 0, p5 = 0, vendido = 0;
 
     allContacts.forEach(c => {
-      const props = c.properties || {};
-      if (props.estatus_inmigracion_comercial && props.estatus_inmigracion_comercial !== '') comercial++;
-      if (props.p3 === 'true' || props.p3 === true) p3++;
-      if (props.p5 === 'true' || props.p5 === true) p5++;
-      if (props.vendido === 'true' || props.vendido === true) vendido++;
+      const status = (c.properties || {}).inmigration_status || '';
+      if (isP1(status)) comercial++;
+      if (status === STATUS_P3) p3++;
+      if (status === STATUS_P5) p5++;
+      if (status === STATUS_VENDIDO) vendido++;
     });
 
     return {
