@@ -595,8 +595,9 @@ const CAMPAIGN_NAME_FILTER = '(CHB) IAD - WhatsApp - ESTADOS';
 // Con tokens definidos en las variables de entorno del servidor
 
 // Tokens — REEMPLAZAR con los reales o usar proxy de Netlify
-const META_TOKEN = 'EAATZB4AZC3NtwBRrLjCexqB94M4nwWnBixsbRCuKvsINdUBDHauXjzSgN8fhsYh9n0PiRVddy88mcIelLA0LzA8n4Kj09RKrqK0ZCtDgv4ti8hhP1yC1ej6SpSyMZAULuNlmTy3GNUjSc9I00aArHTY4zl9WZAt1t4HPY89WBqXXUs881hWvoZBtrXk8yFjgZDZD';
-const HS_TOKEN   = 'EAATZB4AZC3NtwBRhRJ11ymwOQTVi5iQFUMANCv7bx50ZAZAh22Q79lKwqjDUr0qfEb7ZACIg6YkPJZBBxRZCtR6Xk1a8G9F10WV9Fc4koTbtD4q7hoqFzg9GLucemOO3p9w1rZAZABVrSdnYlhPwOamkiZBev8ZAyw7QidG0mzRZArmGMdman6W46sCVvWviJTJMfgZDZD';
+// Tokens movidos a Netlify Functions (server-side) — no se exponen en el frontend
+const META_TOKEN = '';
+const HS_TOKEN   = '';
 
 // ============================================================
 // INIT DATES — default últimos 30 días
@@ -721,105 +722,18 @@ async function fetchAll(){
 }
 
 // ============================================================
-// META ADS API
+// META ADS — via Netlify Function (server-side proxy)
 // ============================================================
 async function fetchMetaData(from, to){
-  const token = META_TOKEN;
-
-  // 1. Find campaign by name
-  const campsUrl = `https://graph.facebook.com/v19.0/act_${META_ACCOUNT_ID}/campaigns`
-    + `?fields=id,name,status&access_token=${token}`;
-
-  const campsRes  = await fetch(campsUrl);
-  const campsJson = await campsRes.json();
-
-  if(campsJson.error) throw campsJson.error.message;
-
-  const campaign = (campsJson.data || []).find(c =>
-    c.name.toLowerCase().includes(CAMPAIGN_NAME_FILTER.toLowerCase().substring(0,20))
-  );
-
-  if(!campaign) {
-    // Try partial match or fallback to account-level
-    return await fetchMetaAccountLevel(from, to, token);
-  }
-
-  return await fetchMetaCampaignInsights(campaign.id, from, to, token);
-}
-
-async function fetchMetaCampaignInsights(campaignId, from, to, token){
-  const insightsUrl = `https://graph.facebook.com/v19.0/${campaignId}/insights`
-    + `?fields=spend,messaging_conversation_started_7d,actions,cost_per_action_type`
-    + `&time_range={"since":"${from}","until":"${to}"}`
-    + `&access_token=${token}`;
-
-  const res  = await fetch(insightsUrl);
+  const res  = await fetch(`/.netlify/functions/meta?since=${from}&until=${to}`);
   const json = await res.json();
-
-  if(json.error) throw json.error.message;
-
-  const d = (json.data || [])[0] || {};
-  const spend    = parseFloat(d.spend || 0);
-  const messages = extractAction(d.actions, 'onsite_conversion.messaging_conversation_started_7d')
-                || extractAction(d.actions, 'post_engagement') || 0;
-
-  // Daily breakdown
-  const dailyUrl = `https://graph.facebook.com/v19.0/${campaignId}/insights`
-    + `?fields=spend,actions&time_increment=1`
-    + `&time_range={"since":"${from}","until":"${to}"}`
-    + `&access_token=${token}`;
-
-  const dailyRes  = await fetch(dailyUrl);
-  const dailyJson = await dailyRes.json();
-  const trend = (dailyJson.data || []).map(row => ({
-    date: row.date_start,
-    msgs: extractAction(row.actions, 'onsite_conversion.messaging_conversation_started_7d') || 0,
-    spend: parseFloat(row.spend || 0)
-  }));
-
-  // Adsets
-  const adsetsUrl = `https://graph.facebook.com/v19.0/${campaignId}/adsets`
-    + `?fields=id,name,status`
-    + `&access_token=${token}`;
-  const adsetsRes  = await fetch(adsetsUrl);
-  const adsetsJson = await adsetsRes.json();
-
-  const adsetInsightsUrl = `https://graph.facebook.com/v19.0/${campaignId}/insights`
-    + `?fields=adset_name,adset_id,spend,actions&level=adset`
-    + `&time_range={"since":"${from}","until":"${to}"}`
-    + `&access_token=${token}`;
-  const aiRes  = await fetch(adsetInsightsUrl);
-  const aiJson = await aiRes.json();
-
-  const adsets = (aiJson.data || []).map(a => ({
-    name: a.adset_name,
-    msgs: extractAction(a.actions, 'onsite_conversion.messaging_conversation_started_7d') || 0,
-    spend: parseFloat(a.spend || 0),
-    status: 'ACTIVE'
-  }));
-
-  return { spend, messages, trend, adsets };
-}
-
-async function fetchMetaAccountLevel(from, to, token){
-  // Fallback: account-level insights filtered by campaign name pattern
-  const url = `https://graph.facebook.com/v19.0/act_${META_ACCOUNT_ID}/insights`
-    + `?fields=spend,actions&level=campaign`
-    + `&filtering=[{"field":"campaign.name","operator":"CONTAIN","value":"CHB"}]`
-    + `&time_range={"since":"${from}","until":"${to}"}`
-    + `&access_token=${token}`;
-
-  const res  = await fetch(url);
-  const json = await res.json();
-  if(json.error) throw json.error.message;
-
-  let spend = 0; let messages = 0;
-  (json.data || []).forEach(d => {
-    spend    += parseFloat(d.spend || 0);
-    messages += extractAction(d.actions, 'onsite_conversion.messaging_conversation_started_7d') || 0;
-  });
-
-  return { spend, messages, trend: [], adsets: [] };
+  if(json.error) throw json.error;
+  return {
+    spend:    json.spend    || 0,
+    messages: json.messages || 0,
+    trend:    json.trend    || [],
+    adsets:   json.adsets   || []
+  };
 }
 
 function extractAction(actions, type){
@@ -829,102 +743,16 @@ function extractAction(actions, type){
 }
 
 // ============================================================
-// HUBSPOT API
+// HUBSPOT — via Netlify Function (server-side proxy)
 // ============================================================
 async function fetchHubSpotData(from, to){
-  const token = HS_TOKEN;
-
-  // Search contacts with:
-  // - id_de_pauta_conversacion___picallex is known
-  // - createdate between from and to
-  const body = {
-    filterGroups: [{
-      filters: [
-        {
-          propertyName: 'id_de_pauta_conversacion___picallex',
-          operator: 'HAS_PROPERTY'
-        },
-        {
-          propertyName: 'createdate',
-          operator: 'BETWEEN',
-          highValue: new Date(to + 'T23:59:59').getTime().toString(),
-          value: new Date(from + 'T00:00:00').getTime().toString()
-        }
-      ]
-    }],
-    properties: [
-      'createdate',
-      'estatus_inmigracion_comercial',
-      'p3',
-      'p5',
-      'vendido',
-      'id_de_pauta_conversacion___picallex'
-    ],
-    limit: 200
-  };
-
-  const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'accept': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
-
-  if(!res.ok){
-    const errText = await res.text();
-    throw `HubSpot ${res.status}: ${errText.substring(0,200)}`;
-  }
+  const res  = await fetch(`/.netlify/functions/hubspot?since=${from}&until=${to}`);
   const json = await res.json();
-  if(json.status === 'error') throw json.message;
-
-  const contacts = json.results || [];
-  const total    = json.total   || contacts.length;
-
-  // Quality breakdown
-  let comercial = 0, p3 = 0, p5 = 0, vendido = 0;
-
-  contacts.forEach(c => {
-    const props = c.properties || {};
-    if(props.estatus_inmigracion_comercial && props.estatus_inmigracion_comercial !== '') comercial++;
-    if(props.p3 === 'true' || props.p3 === true) p3++;
-    if(props.p5 === 'true' || props.p5 === true) p5++;
-    if(props.vendido === 'true' || props.vendido === true) vendido++;
-  });
-
-  // Paginate if needed (up to 1000)
-  if(json.paging?.next?.after && contacts.length < total){
-    const more = await fetchHubSpotPage(token, body, json.paging.next.after);
-    more.forEach(c => {
-      const props = c.properties || {};
-      if(props.estatus_inmigracion_comercial && props.estatus_inmigracion_comercial !== '') comercial++;
-      if(props.p3 === 'true' || props.p3 === true) p3++;
-      if(props.p5 === 'true' || props.p5 === true) p5++;
-      if(props.vendido === 'true' || props.vendido === true) vendido++;
-    });
-  }
-
+  if(json.error) throw json.error;
   return {
-    total,
-    quality: { comercial, p3, p5, vendido }
+    total:   json.total   || 0,
+    quality: json.quality || { comercial:0, p3:0, p5:0, vendido:0 }
   };
-}
-
-async function fetchHubSpotPage(token, baseBody, after){
-  const body = { ...baseBody, after };
-  const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'accept': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
-  const json = await res.json();
-  return json.results || [];
 }
 
 // ============================================================
