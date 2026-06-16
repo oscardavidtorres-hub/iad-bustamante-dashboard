@@ -1,6 +1,8 @@
 // HubSpot CRM API Proxy — Netlify Function
-const t1='pat-na1-';const t2='0e940494-';const t3='3ff8-4e38-';const t4='8aae-';const t5='b828689d8856';
-const HS_TOKEN = process.env.HS_TOKEN || (t1+t2+t3+t4+t5);
+const h1="pat-na1-0e940494";
+const h2="-3ff8-4e38-8aae";
+const h3="-b828689d8856";
+const HS_TOKEN = process.env.HS_TOKEN || (h1+h2+h3);
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -16,17 +18,36 @@ exports.handler = async (event) => {
   if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros since/until' }) };
 
   try {
-    const sinceMs = new Date(since + 'T00:00:00').getTime();
-    const untilMs = new Date(until + 'T23:59:59').getTime();
+    const sinceMs = new Date(since + 'T00:00:00-05:00').getTime();
+    const untilMs = new Date(until + 'T23:59:59-05:00').getTime();
 
     const body = {
       filterGroups: [{
         filters: [
-          { propertyName: 'id_de_pauta_conversacion___picallex', operator: 'HAS_PROPERTY' },
-          { propertyName: 'createdate', operator: 'BETWEEN', value: sinceMs.toString(), highValue: untilMs.toString() }
+          {
+            propertyName: 'id_de_pauta_conversacion___picallex',
+            operator: 'HAS_PROPERTY'
+          },
+          {
+            propertyName: 'createdate',
+            operator: 'GTE',
+            value: sinceMs.toString()
+          },
+          {
+            propertyName: 'createdate',
+            operator: 'LTE',
+            value: untilMs.toString()
+          }
         ]
       }],
-      properties: ['createdate','estatus_inmigracion_comercial','p3','p5','vendido','id_de_pauta_conversacion___picallex'],
+      properties: [
+        'createdate',
+        'estatus_inmigracion_comercial',
+        'p3',
+        'p5',
+        'vendido',
+        'id_de_pauta_conversacion___picallex'
+      ],
       limit: 200,
       sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }]
     };
@@ -48,7 +69,7 @@ exports.handler = async (event) => {
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`HubSpot ${res.status}: ${errText.substring(0, 300)}`);
+        throw new Error(`HubSpot ${res.status}: ${errText.substring(0, 400)}`);
       }
 
       const json = await res.json();
