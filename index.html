@@ -794,10 +794,9 @@ function renderQuality(q, total){
   const container = document.getElementById('qualityChart');
 
   const items = [
-    { label: 'Estatus Comercial', value: q.comercial, cls: 'comercial' },
-    { label: 'P3',               value: q.p3,        cls: 'p3'        },
-    { label: 'P5',               value: q.p5,        cls: 'p5'        },
-    { label: 'Vendidos',         value: q.vendido,   cls: 'vendido'   },
+    { label: 'P3',      value: q.p3,      cls: 'p3'      },
+    { label: 'P5',      value: q.p5,      cls: 'p5'      },
+    { label: 'Vendidos',value: q.vendido, cls: 'vendido' },
   ];
 
   const max = Math.max(...items.map(i => i.value), 1);
