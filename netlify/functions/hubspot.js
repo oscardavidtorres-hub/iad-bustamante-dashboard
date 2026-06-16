@@ -25,7 +25,7 @@ exports.handler = async (event) => {
       filterGroups: [{
         filters: [
           {
-            propertyName: 'id_de_pauta_conversacion___picallex',
+            propertyName: 'id_de_pauta_conversacion__picallex',
             operator: 'HAS_PROPERTY'
           },
           {
@@ -46,7 +46,7 @@ exports.handler = async (event) => {
         'p3',
         'p5',
         'vendido',
-        'id_de_pauta_conversacion___picallex'
+        'id_de_pauta_conversacion__picallex'
       ],
       limit: 200,
       sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }]
