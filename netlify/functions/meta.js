@@ -1,9 +1,15 @@
 // Meta Ads API Proxy — Netlify Function
-const m1='EAATZB4AZC3NtwBR';const m2='rLjCexqB94M4nwWn';const m3='BixsbRCuKvsINdUB';
-const m4='DHauXjzSgN8fhsYh';const m5='9n0PiRVddy88mcIe';const m6='lLA0LzA8n4Kj09RK';
-const m7='rqK0ZCtDgv4ti8hh';const m8='P1yC1ej6SpSyMZAU';const m9='lNlmTy3GNUjSc9I0';
-const m10='0aArHTY4zl9WZAt1';const m11='t4HPY89WBqXXUs88';const m12='1hWvoZBtrXk8yFjgZDZD';
-const META_TOKEN = process.env.META_TOKEN || (m1+m2+m3+m4+m5+m6+m7+m8+m9+m10+m11+m12);
+const m1="EAATZB4AZC3NtwBRrLjC";
+const m2="exqB94M4nwWnBixsbRCu";
+const m3="KvsINdUBDHauXjzSgN8f";
+const m4="hsYh9n0PiRVddy88mcIe";
+const m5="lLA0LzA8n4Kj09RKrqK0";
+const m6="ZCtDgv4ti8hhP1yC1ej6";
+const m7="SpSyMZAULuNlmTy3GNUj";
+const m8="Sc9I00aArHTY4zl9WZAt";
+const m9="1t4HPY89WBqXXUs881hW";
+const m10="voZBtrXk8yFjgZDZD";
+const META_TOKEN = process.env.META_TOKEN || (m1+m2+m3+m4+m5+m6+m7+m8+m9+m10);
 const ACCOUNT_ID = '2702947393233872';
 
 const CORS = {
@@ -20,7 +26,6 @@ exports.handler = async (event) => {
   if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros since/until' }) };
 
   try {
-    // Buscar campaña CHB IAD
     const campsRes = await fetch(
       `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/campaigns?fields=id,name,status&limit=100&access_token=${META_TOKEN}`
     );
@@ -34,7 +39,6 @@ exports.handler = async (event) => {
     let spend = 0, messages = 0, trend = [], adsets = [];
 
     if (campaign) {
-      // Insights totales
       const insRes = await fetch(
         `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,actions&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
@@ -48,7 +52,6 @@ exports.handler = async (event) => {
                 || 0;
       }
 
-      // Tendencia diaria
       const dailyRes = await fetch(
         `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
@@ -62,7 +65,6 @@ exports.handler = async (event) => {
         spend: parseFloat(row.spend || 0)
       }));
 
-      // Adsets
       const adsetRes = await fetch(
         `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=adset_name,spend,actions&level=adset&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
@@ -77,7 +79,6 @@ exports.handler = async (event) => {
       }));
 
     } else {
-      // Fallback nivel cuenta
       const fallRes = await fetch(
         `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/insights?fields=spend,actions&level=campaign&filtering=[{"field":"campaign.name","operator":"CONTAIN","value":"CHB"}]&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
