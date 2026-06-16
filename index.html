@@ -522,7 +522,7 @@
         <span class="src-tag meta">META</span>
       </div>
       <div class="kpi-value" id="kpi-meta-cost">—</div>
-      <div class="kpi-sub" id="kpi-meta-cost-sub">USD invertidos en campaña</div>
+      <div class="kpi-sub" id="kpi-meta-cost-sub">COP invertidos en campaña</div>
       <div class="kpi-icon">💰</div>
     </div>
 
@@ -773,12 +773,12 @@ function renderAll(){
   setKpi('kpi-hs-conv', hsContacts.toLocaleString('es-CO'));
   document.getElementById('kpi-hs-conv-sub').textContent = 'Contactos con ID Pauta Picallex';
 
-  setKpi('kpi-meta-cost', `$${metaSpend.toLocaleString('es-CO', {minimumFractionDigits:2,maximumFractionDigits:2})} USD`);
-  document.getElementById('kpi-meta-cost-sub').textContent = 'Inversión Meta total';
+  setKpi('kpi-meta-cost', `$${Math.round(metaSpend).toLocaleString('es-CO')} COP`);
+  document.getElementById('kpi-meta-cost-sub').textContent = 'Inversión Meta total (COP)';
 
   const costPerHs = hsContacts > 0 ? metaSpend / hsContacts : 0;
-  setKpi('kpi-hs-cost', `$${costPerHs.toLocaleString('es-CO', {minimumFractionDigits:2,maximumFractionDigits:2})} USD`);
-  document.getElementById('kpi-hs-cost-sub').textContent = 'Inversión Meta ÷ Conv. HubSpot';
+  setKpi('kpi-hs-cost', `$${Math.round(costPerHs).toLocaleString('es-CO')} COP`);
+  document.getElementById('kpi-hs-cost-sub').textContent = 'Inversión Meta ÷ Conv. HubSpot (COP)';
 
   // Quality Chart
   renderQuality(qualityData, hsContacts);
@@ -912,7 +912,7 @@ function renderAdsets(adsets){
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
           title="${a.name}">${a.name}</td>
       <td>${a.msgs.toLocaleString()}</td>
-      <td>$${a.spend.toFixed(2)}</td>
+      <td>$${Math.round(a.spend).toLocaleString('es-CO')} COP</td>
       <td><span class="badge ${a.status === 'ACTIVE' ? 'active' : 'paused'}">${a.status === 'ACTIVE' ? 'Activo' : 'Pausado'}</span></td>
     </tr>`).join('');
 }
