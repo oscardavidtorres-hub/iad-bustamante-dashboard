@@ -1,4 +1,4 @@
-const HS_TOKEN = 'EAATZB4AZC3NtwBRhRJ11ymwOQTVi5iQFUMANCv7bx50ZAZAh22Q79lKwqjDUr0qfEb7ZACIg6YkPJZBBxRZCtR6Xk1a8G9F10WV9Fc4koTbtD4q7hoqFzg9GLucemOO3p9w1rZAZABVrSdnYlhPwOamkiZBev8ZAyw7QidG0mzRZArmGMdman6W46sCVvWviJTJMfgZDZD';
+const HS_TOKEN = process.env.HS_TOKEN;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
