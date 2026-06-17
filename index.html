@@ -818,9 +818,8 @@ function renderQuality(q, total){
 function renderTrend(trend){
   const canvas = document.getElementById('trendCanvas');
   const ctx    = canvas.getContext('2d');
-
   const W = canvas.parentElement.offsetWidth;
-  const H = 120;
+  const H = 150;
   canvas.width  = W;
   canvas.height = H;
 
@@ -832,72 +831,88 @@ function renderTrend(trend){
     return;
   }
 
-  const pad  = { l:10, r:10, t:10, b:20 };
+  const pad = { l:34, r:14, t:16, b:28 };
+  const cW  = W - pad.l - pad.r;
+  const cH  = H - pad.t - pad.b;
   const maxV = Math.max(...trend.map(d => d.msgs), 1);
+  const barW = cW / trend.length;
 
-  ctx.clearRect(0,0,W,H);
+  const px = (i) => pad.l + (i + 0.5) * barW;
+  const py = (v) => pad.t + cH * (1 - v / maxV);
 
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines + Y labels
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 1;
-  [0.25,0.5,0.75,1].forEach(f => {
-    const y = pad.t + (H - pad.t - pad.b) * (1 - f);
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  ctx.font = '8px Barlow';
+  ctx.fillStyle = 'rgba(138,180,212,0.45)';
+  ctx.textAlign = 'right';
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const y = pad.t + cH * (1 - f);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    if(f > 0) ctx.fillText(Math.round(maxV * f), pad.l - 4, y + 3);
   });
 
   // Area fill
-  const barW = (W - pad.l - pad.r) / trend.length;
-
   const grad = ctx.createLinearGradient(0, pad.t, 0, H - pad.b);
-  grad.addColorStop(0, 'rgba(253,180,20,0.5)');
+  grad.addColorStop(0, 'rgba(253,180,20,0.45)');
   grad.addColorStop(1, 'rgba(253,180,20,0.02)');
 
   ctx.beginPath();
-  ctx.moveTo(pad.l, H - pad.b);
-  trend.forEach((d, i) => {
-    const x = pad.l + (i + 0.5) * barW;
-    const y = pad.t + (H - pad.t - pad.b) * (1 - d.msgs / maxV);
-    if(i === 0) ctx.lineTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(pad.l + trend.length * barW, H - pad.b);
+  ctx.moveTo(px(0), H - pad.b);
+  trend.forEach((d, i) => ctx.lineTo(px(i), py(d.msgs)));
+  ctx.lineTo(px(trend.length - 1), H - pad.b);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
 
   // Line
   ctx.beginPath();
-  trend.forEach((d, i) => {
-    const x = pad.l + (i + 0.5) * barW;
-    const y = pad.t + (H - pad.t - pad.b) * (1 - d.msgs / maxV);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
+  trend.forEach((d, i) => i === 0 ? ctx.moveTo(px(i), py(d.msgs)) : ctx.lineTo(px(i), py(d.msgs)));
   ctx.strokeStyle = '#fdb414';
   ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // Dots
+  // Dots + value labels on peak and every ~7 days
   trend.forEach((d, i) => {
-    const x = pad.l + (i + 0.5) * barW;
-    const y = pad.t + (H - pad.t - pad.b) * (1 - d.msgs / maxV);
+    const x = px(i), y = py(d.msgs);
+    const isPeak = d.msgs === maxV;
+    const showLabel = isPeak || i === 0 || i === trend.length - 1 || (trend.length > 14 && i % 7 === 0) || trend.length <= 10;
+
     ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#fdb414';
+    ctx.arc(x, y, isPeak ? 4 : 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = isPeak ? '#fff' : '#fdb414';
     ctx.fill();
+
+    if(showLabel && d.msgs > 0){
+      ctx.font = isPeak ? 'bold 9px Barlow' : '8px Barlow';
+      ctx.fillStyle = isPeak ? '#fdb414' : 'rgba(138,180,212,0.7)';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.msgs, x, y - 6);
+    }
   });
 
-  // Labels (first + last)
-  ctx.fillStyle = 'rgba(138,180,212,0.6)';
-  ctx.font = '9px Barlow';
+  // X-axis date labels — first, last, and evenly spaced
+  ctx.fillStyle = 'rgba(138,180,212,0.55)';
+  ctx.font = '8px Barlow';
   ctx.textAlign = 'center';
-  if(trend[0]){
-    const lbl = trend[0].date.slice(5);
-    ctx.fillText(lbl, pad.l + barW*0.5, H - 4);
+  const labelIdxs = new Set([0, trend.length - 1]);
+  if(trend.length > 4){
+    const step = Math.ceil(trend.length / 5);
+    for(let i = step; i < trend.length - 1; i += step) labelIdxs.add(i);
   }
-  if(trend.length > 1){
-    const last = trend[trend.length-1];
-    const lbl  = last.date.slice(5);
-    ctx.fillText(lbl, pad.l + (trend.length - 0.5) * barW, H - 4);
-  }
+  labelIdxs.forEach(i => {
+    ctx.fillText(trend[i].date.slice(5), px(i), H - 6);
+  });
+
+  // Tooltip on hover
+  canvas._trend = trend;
+  canvas._pad = pad;
+  canvas._barW = barW;
+  canvas._maxV = maxV;
+  canvas._cH = cH;
 }
 
 function renderAdsets(adsets){
@@ -906,7 +921,8 @@ function renderAdsets(adsets){
     body.innerHTML = '<tr><td colspan="4" style="color:var(--text-muted);padding:12px 8px;text-align:center;">Sin datos de ad sets</td></tr>';
     return;
   }
-  body.innerHTML = adsets.slice(0, 5).map(a => `
+  const top5 = [...adsets].sort((a,b) => b.msgs - a.msgs).slice(0, 5);
+  body.innerHTML = top5.map(a => `
     <tr>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
           title="${a.name}">${a.name}</td>
