@@ -52,8 +52,9 @@ exports.handler = async (event) => {
                 || 0;
       }
 
+      // Tendencia diaria a nivel de cuenta — adquisición total por día
       const dailyRes = await fetch(
-        `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
+        `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/insights?fields=spend,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
       const dailyJson = await dailyRes.json();
       trend = (dailyJson.data || []).map(row => ({
