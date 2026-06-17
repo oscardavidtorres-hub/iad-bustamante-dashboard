@@ -33,7 +33,8 @@ exports.handler = async (event) => {
         filters: [
           { propertyName: 'id_de_pauta_conversacion__picallex', operator: 'HAS_PROPERTY' },
           { propertyName: 'createdate', operator: 'GTE', value: String(sinceMs) },
-          { propertyName: 'createdate', operator: 'LTE', value: String(untilMs) }
+          { propertyName: 'createdate', operator: 'LTE', value: String(untilMs) },
+          { propertyName: 'hs_object_source_detail_1', operator: 'EQ', value: 'PicallEx App Integration-Application' }
         ]
       }],
       properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
