@@ -148,7 +148,7 @@
   /* KPI GRID */
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
     margin-bottom: 16px;
   }
@@ -174,7 +174,8 @@
   .kpi-card.meta-conv::before { background: linear-gradient(90deg, #1877f2, #42a5f5); }
   .kpi-card.hs-conv::before { background: linear-gradient(90deg, #ff7a59, #ffb347); }
   .kpi-card.meta-cost::before { background: linear-gradient(90deg, var(--amber), var(--orange)); }
-  .kpi-card.hs-cost::before { background: linear-gradient(90deg, #a855f7, #ec4899); }
+  .kpi-card.hs-cost::before  { background: linear-gradient(90deg, #a855f7, #ec4899); }
+  .kpi-card.cpl-hs::before  { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
 
   .kpi-label {
     font-size: 10px; font-weight: 600;
@@ -333,6 +334,111 @@
 
   .badge.active { background: rgba(34,197,94,0.2); color: #22c55e; }
   .badge.paused { background: rgba(253,180,20,0.2); color: var(--amber); }
+
+
+  /* DAILY TABLE */
+  .daily-section {
+    margin-top: 16px;
+  }
+
+  .daily-header {
+    margin-bottom: 8px;
+  }
+
+  .daily-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 700px;
+  }
+
+  .daily-table thead tr {
+    background: rgba(15,52,96,0.8);
+  }
+
+  .daily-table th {
+    padding: 12px 16px;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted);
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .daily-table th.col-leads {
+    color: #22c55e;
+    text-align: right;
+    background: rgba(34,197,94,0.06);
+  }
+
+  .daily-table th.col-cpl {
+    color: #f97316;
+    text-align: right;
+    background: rgba(249,115,22,0.06);
+  }
+
+  .daily-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  .daily-table tbody tr:hover td {
+    background: rgba(253,180,20,0.04);
+  }
+
+  .daily-table .td-date {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .daily-table .td-spend {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .daily-table .td-num {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .daily-table .td-leads {
+    text-align: right;
+    font-weight: 700;
+    font-size: 15px;
+    color: #22c55e;
+    background: rgba(34,197,94,0.04);
+  }
+
+  .daily-table .td-cpl {
+    text-align: right;
+    font-weight: 700;
+    color: #f97316;
+    background: rgba(249,115,22,0.04);
+  }
+
+  .daily-table tfoot td {
+    padding: 11px 16px;
+    font-weight: 700;
+    font-size: 12px;
+    background: rgba(15,52,96,0.6);
+    border-top: 2px solid var(--border);
+    color: var(--amber);
+  }
+
+  .daily-table tfoot .td-leads {
+    color: #22c55e;
+    background: rgba(34,197,94,0.08);
+  }
+
+  .daily-table tfoot .td-cpl {
+    color: #f97316;
+    background: rgba(249,115,22,0.08);
+  }
 
   /* LOADING SPINNER */
   .spinner {
@@ -529,12 +635,23 @@
     <div class="kpi-card hs-cost" style="position:relative;">
       <div class="loading-overlay hidden" id="ld-hs-cost"><span class="spinner"></span> Cargando</div>
       <div class="kpi-label">
-        Costo x Conv.
-        <span class="src-tag hs">CALC</span>
+        CPL Meta
+        <span class="src-tag meta">META</span>
       </div>
       <div class="kpi-value" id="kpi-hs-cost">—</div>
-      <div class="kpi-sub" id="kpi-hs-cost-sub">Inversión Meta ÷ Conv. HubSpot</div>
+      <div class="kpi-sub" id="kpi-hs-cost-sub">Inversión ÷ Conv. Meta</div>
       <div class="kpi-icon">📊</div>
+    </div>
+
+    <div class="kpi-card cpl-hs" style="position:relative;">
+      <div class="loading-overlay hidden" id="ld-cpl-hs"><span class="spinner"></span> Cargando</div>
+      <div class="kpi-label">
+        CPL HubSpot
+        <span class="src-tag hs">CALC</span>
+      </div>
+      <div class="kpi-value" id="kpi-cpl-hs">—</div>
+      <div class="kpi-sub" id="kpi-cpl-hs-sub">Inversión ÷ Conv. HubSpot</div>
+      <div class="kpi-icon">🎯</div>
     </div>
 
   </div>
@@ -579,6 +696,42 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- DESGLOSE DIARIO -->
+  <div class="daily-section" id="dailySection" style="display:none;">
+    <div class="daily-header">
+      <div class="daily-title">
+        <span style="color:var(--amber);font-size:11px;letter-spacing:2px;font-weight:700;text-transform:uppercase;">▪ Detalle Diario</span>
+      </div>
+    </div>
+    <div class="chart-card" style="padding:0;overflow:hidden;">
+      <div style="padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.15);">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--amber);">Métricas por fecha · Meta Ads + HubSpot CRM</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Inversión, impresiones, alcance y leads diarios</div>
+        </div>
+        <div id="dailyDaysLabel" style="background:rgba(253,180,20,0.15);border:1px solid rgba(253,180,20,0.3);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;color:var(--amber);">— días</div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="daily-table" id="dailyTable">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Inversión Total</th>
+              <th>Impresiones</th>
+              <th>Alcance</th>
+              <th class="col-leads">Leads Nuevos<br><small>en HubSpot</small></th>
+              <th class="col-cpl">CPL HubSpot<br><small>Promedio</small></th>
+            </tr>
+          </thead>
+          <tbody id="dailyBody">
+            <tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Cargando...</td></tr>
+          </tbody>
+          <tfoot id="dailyFoot"></tfoot>
+        </table>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -628,7 +781,8 @@ let state = {
   hsContacts: 0,
   qualityData: { comercial:0, p3:0, p5:0, vendido:0 },
   trendData: [],
-  adsets: []
+  adsets: [],
+  hsByDay: {}
 };
 
 // ============================================================
@@ -678,9 +832,9 @@ async function fetchAll(){
   document.getElementById('btnApply').disabled = true;
   setStatus(`Cargando datos <strong>${fmtDisplay(from)}</strong> → <strong>${fmtDisplay(to)}</strong>...`, 'loading');
 
-  showLoaders('meta-conv','hs-conv','meta-cost','hs-cost','quality','trend');
+  showLoaders('meta-conv','hs-conv','meta-cost','hs-cost','cpl-hs','quality','trend');
   setKpi('kpi-meta-conv','...'); setKpi('kpi-hs-conv','...');
-  setKpi('kpi-meta-cost','...'); setKpi('kpi-hs-cost','...');
+  setKpi('kpi-meta-cost','...'); setKpi('kpi-hs-cost','...'); setKpi('kpi-cpl-hs','...');
 
   try {
     const [metaResult, hsResult] = await Promise.allSettled([
@@ -702,6 +856,7 @@ async function fetchAll(){
     if(hsResult.status === 'fulfilled'){
       state.hsContacts   = hsResult.value.total;
       state.qualityData  = hsResult.value.quality;
+      state.hsByDay      = hsResult.value.byDay || {};
     } else {
       showError('HubSpot API: ' + hsResult.reason);
     }
@@ -717,7 +872,7 @@ async function fetchAll(){
     setStatus('Error al cargar datos', 'error');
   }
 
-  hideLoaders('meta-conv','hs-conv','meta-cost','hs-cost','quality','trend');
+  hideLoaders('meta-conv','hs-conv','meta-cost','hs-cost','cpl-hs','quality','trend');
   document.getElementById('btnApply').disabled = false;
 }
 
@@ -751,7 +906,8 @@ async function fetchHubSpotData(from, to){
   if(json.error) throw json.error;
   return {
     total:   json.total   || 0,
-    quality: json.quality || { comercial:0, p3:0, p5:0, vendido:0 }
+    quality: json.quality || { comercial:0, p3:0, p5:0, vendido:0 },
+    byDay:   json.byDay   || {}
   };
 }
 
@@ -780,6 +936,16 @@ function renderAll(){
   setKpi('kpi-hs-cost', `$${Math.round(costPerHs).toLocaleString('es-CO')} COP`);
   document.getElementById('kpi-hs-cost-sub').textContent = 'Inversión Meta ÷ Conv. HubSpot (COP)';
 
+  // CPL Meta (inversión / conv meta)
+  const cplMeta = metaMessages > 0 ? metaSpend / metaMessages : 0;
+  setKpi('kpi-hs-cost', `$${Math.round(cplMeta).toLocaleString('es-CO')} COP`);
+  document.getElementById('kpi-hs-cost-sub').textContent = 'Inversión ÷ Conv. Meta (COP)';
+
+  // CPL HubSpot (inversión / conv hubspot)
+  const cplHs = hsContacts > 0 ? metaSpend / hsContacts : 0;
+  setKpi('kpi-cpl-hs', `$${Math.round(cplHs).toLocaleString('es-CO')} COP`);
+  document.getElementById('kpi-cpl-hs-sub').textContent = 'Inversión ÷ Conv. HubSpot (COP)';
+
   // Quality Chart
   renderQuality(qualityData, hsContacts);
 
@@ -788,6 +954,9 @@ function renderAll(){
 
   // Adsets
   renderAdsets(adsets);
+
+  // Daily breakdown
+  renderDailyTable(trendData, state.hsByDay);
 }
 
 function renderQuality(q, total){
@@ -933,6 +1102,61 @@ function renderAdsets(adsets){
 }
 
 // ============================================================
+// DESGLOSE DIARIO
+// ============================================================
+function renderDailyTable(trend, hsByDay) {
+  const section = document.getElementById('dailySection');
+  const body    = document.getElementById('dailyBody');
+  const foot    = document.getElementById('dailyFoot');
+  const daysLbl = document.getElementById('dailyDaysLabel');
+
+  if (!trend || trend.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  daysLbl.textContent = trend.length + ' días';
+
+  let totSpend = 0, totImpr = 0, totReach = 0, totLeads = 0;
+
+  const rows = trend.map(d => {
+    const [y, m, day] = d.date.split('-');
+    const dateStr  = `${day}/${m}`;
+    const leads    = hsByDay[d.date] || 0;
+    const cpl      = leads > 0 ? Math.round(d.spend / leads) : 0;
+
+    totSpend += d.spend;
+    totImpr  += d.impressions || 0;
+    totReach += d.reach       || 0;
+    totLeads += leads;
+
+    return `
+      <tr>
+        <td class="td-date">${dateStr}</td>
+        <td class="td-spend">$${Math.round(d.spend).toLocaleString('es-CO')}</td>
+        <td class="td-num">${(d.impressions||0).toLocaleString('es-CO')}</td>
+        <td class="td-num">${(d.reach||0).toLocaleString('es-CO')}</td>
+        <td class="td-leads">${leads > 0 ? leads : '<span style="color:var(--text-muted);font-weight:400">—</span>'}</td>
+        <td class="td-cpl">${cpl > 0 ? '$' + cpl.toLocaleString('es-CO') : '<span style="color:var(--text-muted);font-weight:400">—</span>'}</td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = rows;
+
+  const totCpl = totLeads > 0 ? Math.round(totSpend / totLeads) : 0;
+  foot.innerHTML = `
+    <tr>
+      <td>TOTAL</td>
+      <td class="td-spend">$${Math.round(totSpend).toLocaleString('es-CO')}</td>
+      <td>${totImpr.toLocaleString('es-CO')}</td>
+      <td>${totReach.toLocaleString('es-CO')}</td>
+      <td class="td-leads">${totLeads.toLocaleString('es-CO')}</td>
+      <td class="td-cpl">${totCpl > 0 ? '$' + totCpl.toLocaleString('es-CO') : '—'}</td>
+    </tr>`;
+}
+
+// ============================================================
 // AUTO-LOAD AL INICIAR
 // ============================================================
 function isDemoMode(){ return false; }
@@ -977,7 +1201,7 @@ window.fetchAll = async function(){
     document.getElementById('btnApply').disabled = true;
     setStatus(`Modo DEMO · ${fmtDisplay(from)} → ${fmtDisplay(to)} <span style="color:var(--amber);font-size:10px;">[Configura los tokens para datos reales]</span>`, 'loading');
 
-    showLoaders('meta-conv','hs-conv','meta-cost','hs-cost','quality','trend');
+    showLoaders('meta-conv','hs-conv','meta-cost','hs-cost','cpl-hs','quality','trend');
     await new Promise(r => setTimeout(r, 900));
 
     loadDemoData(from, to);
@@ -987,7 +1211,7 @@ window.fetchAll = async function(){
       new Date().toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     setStatus(`📊 DEMO · <strong>${fmtDisplay(from)}</strong> → <strong>${fmtDisplay(to)}</strong> · <span style="color:var(--amber);font-size:10px;">Reemplaza los tokens para datos reales</span>`, 'idle');
 
-    hideLoaders('meta-conv','hs-conv','meta-cost','hs-cost','quality','trend');
+    hideLoaders('meta-conv','hs-conv','meta-cost','hs-cost','cpl-hs','quality','trend');
     document.getElementById('btnApply').disabled = false;
     return;
   }
