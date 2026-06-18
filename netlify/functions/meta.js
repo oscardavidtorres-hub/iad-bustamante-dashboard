@@ -56,7 +56,7 @@ exports.handler = async (event) => {
 
       // 3. Tendencia diaria — nivel CUENTA con impressions y reach
       const dailyRes = await fetch(
-        `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/insights?fields=spend,impressions,reach,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
+        `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,impressions,reach,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
       );
       const dailyJson = await dailyRes.json();
       trend = (dailyJson.data || []).map(row => ({
