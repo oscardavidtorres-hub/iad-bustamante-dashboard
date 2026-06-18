@@ -16,6 +16,46 @@ const STATUS_P5      = 'P5. Otros';
 const STATUS_VENDIDO = 'Vendido';
 const isP1 = (v) => v && v.startsWith('P1.');
 
+// Filtros base — exactamente los del Group 2 de HubSpot
+// 1. ID de Pauta Conversación - Picallex is known
+// 2. Record source detail 1 = PicallEx App Integration-Application
+// + createdate dentro del rango seleccionado
+const BASE_FILTERS = [
+  { propertyName: 'id_de_pauta_conversacion__picallex', operator: 'HAS_PROPERTY' },
+  { propertyName: 'hs_object_source_detail_1', operator: 'EQ', value: 'PicallEx App Integration-Application' }
+];
+
+async function searchContacts(extraFilters = [], limit = 200, after = undefined) {
+  const body = {
+    filterGroups: [{
+      filters: [...BASE_FILTERS, ...extraFilters]
+    }],
+    properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
+    limit,
+    sorts: [{ propertyName: 'createdate', direction: 'ASCENDING' }]
+  };
+  if (after) body.after = after;
+
+  const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${HS_TOKEN}`,
+      'accept': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HubSpot ${res.status}: ${txt.substring(0, 400)}`);
+  }
+
+  const json = await res.json();
+  if (json.status === 'error') throw new Error(json.message);
+  return json;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
@@ -26,76 +66,54 @@ exports.handler = async (event) => {
     const sinceMs = new Date(since + 'T00:00:00').getTime();
     const untilMs = new Date(until + 'T23:59:59').getTime();
 
-    const body = {
-      filterGroups: [{
-        filters: [
-          { propertyName: 'id_de_pauta_conversacion__picallex', operator: 'HAS_PROPERTY' },
-          { propertyName: 'createdate', operator: 'GTE', value: String(sinceMs) },
-          { propertyName: 'createdate', operator: 'LTE', value: String(untilMs) },
-          { propertyName: 'hs_object_source_detail_1', operator: 'EQ', value: 'PicallEx App Integration-Application' }
-        ]
-      }],
-      properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
-      limit: 200,
-      sorts: [{ propertyName: 'createdate', direction: 'ASCENDING' }]
-    };
+    // Filtros de fecha para el rango seleccionado
+    const dateFilters = [
+      { propertyName: 'createdate', operator: 'GTE', value: String(sinceMs) },
+      { propertyName: 'createdate', operator: 'LTE', value: String(untilMs) }
+    ];
 
+    // Obtener TODOS los contactos del rango con paginación
     let allContacts = [];
     let after = undefined;
 
     do {
-      const pageBody = after ? { ...body, after } : body;
-      const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${HS_TOKEN}`,
-          'accept': 'application/json'
-        },
-        body: JSON.stringify(pageBody)
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`HubSpot ${res.status}: ${txt.substring(0, 400)}`);
-      }
-
-      const json = await res.json();
-      if (json.status === 'error') throw new Error(json.message);
-
+      const json = await searchContacts(dateFilters, 200, after);
       allContacts = allContacts.concat(json.results || []);
       after = json.paging?.next?.after;
-
-    } while (after && allContacts.length < 1000);
+    } while (after && allContacts.length < 2000);
 
     const total = allContacts.length;
     let comercial = 0, p3 = 0, p5 = 0, vendido = 0;
-
-    // Agrupar leads por día (YYYY-MM-DD)
     const byDay = {};
 
     allContacts.forEach(c => {
-      const status = (c.properties || {}).inmigration_status || '';
-      if (isP1(status)) comercial++;
-      if (status === STATUS_P3) p3++;
-      if (status === STATUS_P5) p5++;
+      const props  = c.properties || {};
+      const status = props.inmigration_status || '';
+
+      if (isP1(status))            comercial++;
+      if (status === STATUS_P3)    p3++;
+      if (status === STATUS_P5)    p5++;
       if (status === STATUS_VENDIDO) vendido++;
 
-      // Extraer fecha del createdate
-      const cd = c.properties?.createdate;
+      // Agrupar por día YYYY-MM-DD (createdate viene en UTC ISO)
+      const cd = props.createdate;
       if (cd) {
-        const day = cd.substring(0, 10); // YYYY-MM-DD
+        const day = cd.substring(0, 10);
         byDay[day] = (byDay[day] || 0) + 1;
       }
     });
+
+    // Validación: suma de byDay debe = total
+    const sumByDay = Object.values(byDay).reduce((a, b) => a + b, 0);
 
     return {
       statusCode: 200,
       headers: CORS,
       body: JSON.stringify({
         total,
+        sumByDay,  // para debug — debe = total
         quality: { comercial, p3, p5, vendido },
-        byDay   // { "2026-05-20": 12, "2026-05-21": 8, ... }
+        byDay
       })
     };
 
