@@ -11,11 +11,9 @@ const CORS = {
   'Content-Type': 'application/json'
 };
 
-// Valores reales de inmigration_status en HubSpot IAD
 const STATUS_P3      = 'P 3';
 const STATUS_P5      = 'P5. Otros';
 const STATUS_VENDIDO = 'Vendido';
-// P1 = Aplica (comercial calificado)
 const isP1 = (v) => v && v.startsWith('P1.');
 
 exports.handler = async (event) => {
@@ -39,7 +37,7 @@ exports.handler = async (event) => {
       }],
       properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
       limit: 200,
-      sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }]
+      sorts: [{ propertyName: 'createdate', direction: 'ASCENDING' }]
     };
 
     let allContacts = [];
@@ -73,18 +71,32 @@ exports.handler = async (event) => {
     const total = allContacts.length;
     let comercial = 0, p3 = 0, p5 = 0, vendido = 0;
 
+    // Agrupar leads por día (YYYY-MM-DD)
+    const byDay = {};
+
     allContacts.forEach(c => {
       const status = (c.properties || {}).inmigration_status || '';
       if (isP1(status)) comercial++;
       if (status === STATUS_P3) p3++;
       if (status === STATUS_P5) p5++;
       if (status === STATUS_VENDIDO) vendido++;
+
+      // Extraer fecha del createdate
+      const cd = c.properties?.createdate;
+      if (cd) {
+        const day = cd.substring(0, 10); // YYYY-MM-DD
+        byDay[day] = (byDay[day] || 0) + 1;
+      }
     });
 
     return {
       statusCode: 200,
       headers: CORS,
-      body: JSON.stringify({ total, quality: { comercial, p3, p5, vendido } })
+      body: JSON.stringify({
+        total,
+        quality: { comercial, p3, p5, vendido },
+        byDay   // { "2026-05-20": 12, "2026-05-21": 8, ... }
+      })
     };
 
   } catch (err) {
