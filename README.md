@@ -32,6 +32,20 @@ git push -u origin main
 - Publish directory: `.`
 - Deploy ✅
 
+## Variables de entorno (obligatorias)
+
+Las credenciales viven solo en Netlify → Site configuration → Environment variables:
+
+| Variable | Uso |
+|---|---|
+| `Meta_token` | Token de acceso de Meta Ads API |
+| `HS_Token` | Private App token de HubSpot |
+
+Si se rota un token, basta con actualizarlo aquí y volver a desplegar; no hay
+credenciales en el código.
+
 ## Archivos
-- `index.html` — Dashboard completo con tokens integrados
+- `index.html` — Dashboard (consume las funciones, sin credenciales)
+- `netlify/functions/meta.js` — Proxy de Meta Ads; agrega todas las campañas `(CHB) IAD ... WhatsApp`
+- `netlify/functions/hubspot.js` — Proxy de HubSpot; acepta los dos orígenes de PicallEx
 - `netlify.toml` — Headers CORS para que las APIs funcionen desde el browser

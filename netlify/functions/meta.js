@@ -1,16 +1,8 @@
 // Meta Ads API Proxy — Netlify Function
-const m1="EAATZB4AZC3NtwBRrLjC";
-const m2="exqB94M4nwWnBixsbRCu";
-const m3="KvsINdUBDHauXjzSgN8f";
-const m4="hsYh9n0PiRVddy88mcIe";
-const m5="lLA0LzA8n4Kj09RKrqK0";
-const m6="ZCtDgv4ti8hhP1yC1ej6";
-const m7="SpSyMZAULuNlmTy3GNUj";
-const m8="Sc9I00aArHTY4zl9WZAt";
-const m9="1t4HPY89WBqXXUs881hW";
-const m10="voZBtrXk8yFjgZDZD";
-const META_TOKEN = process.env.META_TOKEN || (m1+m2+m3+m4+m5+m6+m7+m8+m9+m10);
+// El token vive solo en las variables de entorno del sitio (Meta_token / META_TOKEN).
+const META_TOKEN = process.env.META_TOKEN || process.env.Meta_token || '';
 const ACCOUNT_ID = '2702947393233872';
+const API = 'https://graph.facebook.com/v19.0';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -19,89 +11,121 @@ const CORS = {
   'Content-Type': 'application/json'
 };
 
+// Nombre de campaña objetivo: (CHB) IAD - WhatsApp - ESTADOS
+// La cuenta tiene varias campañas que empiezan por "(CHB) IAD" (FORM, FORM ELIANA, ...)
+// y varias con el mismo nombre de WhatsApp, así que se agregan TODAS las que coincidan.
+const MATCH_ALL      = ['chb', 'iad', 'whatsapp'];
+const MATCH_FALLBACK = ['chb', 'iad'];
+
+const MSG_ACTIONS = [
+  'onsite_conversion.messaging_conversation_started_7d',
+  'messaging_conversation_started_7d',
+  'onsite_conversion.total_messaging_connection'
+];
+
+async function graph(path, params) {
+  const qs = new URLSearchParams({ ...params, access_token: META_TOKEN });
+  const res  = await fetch(`${API}/${path}?${qs}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  return json;
+}
+
+// Todas las campañas de la cuenta (con paginación)
+async function getCampaigns() {
+  let all = [], after;
+  do {
+    const json = await graph(`act_${ACCOUNT_ID}/campaigns`, {
+      fields: 'id,name,status',
+      limit: 200,
+      ...(after ? { after } : {})
+    });
+    all = all.concat(json.data || []);
+    after = json.paging?.cursors?.after && json.paging?.next ? json.paging.cursors.after : undefined;
+  } while (after && all.length < 1000);
+  return all;
+}
+
+function matchCampaigns(campaigns, words) {
+  return campaigns.filter(c => {
+    const name = (c.name || '').toLowerCase();
+    return words.every(w => name.includes(w));
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
   const { since, until } = event.queryStringParameters || {};
   if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros since/until' }) };
+  if (!META_TOKEN) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'Falta la variable de entorno Meta_token' }) };
 
   try {
-    // 1. Buscar campaña CHB IAD
-    const campsRes = await fetch(
-      `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/campaigns?fields=id,name,status&limit=100&access_token=${META_TOKEN}`
-    );
-    const campsJson = await campsRes.json();
-    if (campsJson.error) throw new Error(campsJson.error.message);
+    const campaigns = await getCampaigns();
+    let matched = matchCampaigns(campaigns, MATCH_ALL);
+    if (!matched.length) matched = matchCampaigns(campaigns, MATCH_FALLBACK);
 
-    const campaign = (campsJson.data || []).find(c =>
-      c.name.toLowerCase().includes('chb') && c.name.toLowerCase().includes('iad')
-    );
+    if (!matched.length) {
+      return {
+        statusCode: 200,
+        headers: CORS,
+        body: JSON.stringify({ spend: 0, messages: 0, trend: [], adsets: [], campaign: 'No encontrada' })
+      };
+    }
 
-    let spend = 0, messages = 0, trend = [], adsets = [];
+    const ids = matched.map(c => c.id);
+    // Se consulta a nivel de cuenta filtrando por los ids encontrados: así los
+    // totales quedan agregados sobre todas las campañas que coinciden.
+    const scope = {
+      time_range: JSON.stringify({ since, until }),
+      filtering: JSON.stringify([{ field: 'campaign.id', operator: 'IN', value: ids }])
+    };
 
-    if (campaign) {
-      // 2. Insights totales campaña
-      const insRes = await fetch(
-        `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,actions&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
-      );
-      const insJson = await insRes.json();
-      if (!insJson.error) {
-        const d = (insJson.data || [])[0] || {};
-        spend    = parseFloat(d.spend || 0);
-        messages = extractAction(d.actions, 'onsite_conversion.messaging_conversation_started_7d')
-                || extractAction(d.actions, 'messaging_conversation_started_7d')
-                || extractAction(d.actions, 'onsite_conversion.total_messaging_connection')
-                || 0;
-      }
+    const [totalsJson, dailyJson, adsetJson] = await Promise.all([
+      graph(`act_${ACCOUNT_ID}/insights`, { ...scope, fields: 'spend,impressions,reach,actions' }),
+      graph(`act_${ACCOUNT_ID}/insights`, { ...scope, fields: 'spend,impressions,reach,actions', time_increment: 1, limit: 500 }),
+      graph(`act_${ACCOUNT_ID}/insights`, { ...scope, fields: 'adset_id,adset_name,spend,actions', level: 'adset', limit: 500 })
+    ]);
 
-      // 3. Tendencia diaria — nivel CUENTA con impressions y reach
-      const dailyRes = await fetch(
-        `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=spend,impressions,reach,actions&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
-      );
-      const dailyJson = await dailyRes.json();
-      trend = (dailyJson.data || []).map(row => ({
+    const totals  = (totalsJson.data || [])[0] || {};
+    const spend    = parseFloat(totals.spend || 0);
+    const messages = extractAction(totals.actions);
+
+    const trend = (dailyJson.data || [])
+      .map(row => ({
         date:        row.date_start,
-        msgs:        extractAction(row.actions, 'onsite_conversion.messaging_conversation_started_7d')
-                  || extractAction(row.actions, 'messaging_conversation_started_7d')
-                  || extractAction(row.actions, 'onsite_conversion.total_messaging_connection')
-                  || 0,
+        msgs:        extractAction(row.actions),
         spend:       parseFloat(row.spend       || 0),
         impressions: parseInt(row.impressions   || 0),
         reach:       parseInt(row.reach         || 0)
-      }));
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-      // 4. Adsets top 5 por mensajes
-      const adsetRes = await fetch(
-        `https://graph.facebook.com/v19.0/${campaign.id}/insights?fields=adset_name,spend,actions&level=adset&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
-      );
-      const adsetJson = await adsetRes.json();
-      adsets = (adsetJson.data || []).map(a => ({
-        name:  a.adset_name,
-        msgs:  extractAction(a.actions, 'onsite_conversion.messaging_conversation_started_7d')
-            || extractAction(a.actions, 'messaging_conversation_started_7d')
-            || 0,
-        spend: parseFloat(a.spend || 0),
-        status: 'ACTIVE'
-      })).sort((a, b) => b.msgs - a.msgs).slice(0, 5);
+    const rows = (adsetJson.data || []).map(a => ({
+      id:    a.adset_id,
+      name:  a.adset_name,
+      msgs:  extractAction(a.actions),
+      spend: parseFloat(a.spend || 0)
+    })).sort((a, b) => b.msgs - a.msgs).slice(0, 5);
 
-    } else {
-      // Fallback nivel cuenta
-      const fallRes = await fetch(
-        `https://graph.facebook.com/v19.0/act_${ACCOUNT_ID}/insights?fields=spend,actions&level=campaign&filtering=[{"field":"campaign.name","operator":"CONTAIN","value":"CHB"}]&time_range={"since":"${since}","until":"${until}"}&access_token=${META_TOKEN}`
-      );
-      const fallJson = await fallRes.json();
-      if (!fallJson.error) {
-        (fallJson.data || []).forEach(row => {
-          spend    += parseFloat(row.spend || 0);
-          messages += extractAction(row.actions, 'onsite_conversion.messaging_conversation_started_7d') || 0;
-        });
-      }
-    }
+    const statuses = await getAdsetStatuses(rows.map(r => r.id));
+    const adsets = rows.map(r => ({
+      name:   r.name,
+      msgs:   r.msgs,
+      spend:  r.spend,
+      status: statuses[r.id] === 'ACTIVE' ? 'ACTIVE' : (statuses[r.id] ? 'PAUSED' : 'ACTIVE')
+    }));
 
     return {
       statusCode: 200,
       headers: CORS,
-      body: JSON.stringify({ spend, messages, trend, adsets, campaign: campaign?.name || 'No encontrada' })
+      body: JSON.stringify({
+        spend,
+        messages,
+        trend,
+        adsets,
+        campaign: [...new Set(matched.map(c => c.name))].join(' + ')
+      })
     };
 
   } catch (err) {
@@ -109,8 +133,24 @@ exports.handler = async (event) => {
   }
 };
 
-function extractAction(actions, type) {
+// Estado real de los adsets mostrados (el badge de la tabla)
+async function getAdsetStatuses(ids) {
+  const clean = ids.filter(Boolean);
+  if (!clean.length) return {};
+  try {
+    const json = await graph('', { ids: clean.join(','), fields: 'effective_status' });
+    return Object.fromEntries(Object.entries(json).map(([id, v]) => [id, v.effective_status]));
+  } catch {
+    return {};
+  }
+}
+
+// Primer tipo de acción de mensajería con valor
+function extractAction(actions) {
   if (!actions) return 0;
-  const found = actions.find(a => a.action_type === type);
-  return found ? parseInt(found.value) : 0;
+  for (const type of MSG_ACTIONS) {
+    const found = actions.find(a => a.action_type === type);
+    if (found) return parseInt(found.value) || 0;
+  }
+  return 0;
 }
