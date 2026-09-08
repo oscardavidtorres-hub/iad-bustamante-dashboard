@@ -1,8 +1,6 @@
 // HubSpot CRM API Proxy — Netlify Function
-const h1="pat-na1-0e940494";
-const h2="-3ff8-4e38-8aae";
-const h3="-b828689d8856";
-const HS_TOKEN = process.env.HS_TOKEN || (h1+h2+h3);
+// El token vive solo en las variables de entorno del sitio (HS_Token / HS_TOKEN).
+const HS_TOKEN = process.env.HS_TOKEN || process.env.HS_Token || '';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -16,44 +14,69 @@ const STATUS_P5      = 'P5. Otros';
 const STATUS_VENDIDO = 'Vendido';
 const isP1 = (v) => v && v.startsWith('P1.');
 
-// Filtros base — exactamente los del Group 2 de HubSpot
+// Valores que PicallEx ha escrito en "Record source detail 1".
+// La integración cambió la etiqueta a mitad de camino: desde finales de agosto de
+// 2026 los contactos llegan como "PicallEx Integration", así que hay que aceptar
+// ambos valores o se pierden todos los contactos recientes.
+const PICALLEX_SOURCES = [
+  'PicallEx App Integration-Application',
+  'PicallEx Integration'
+];
+
+// Filtros base — Group 2 de HubSpot
 // 1. ID de Pauta Conversación - Picallex is known
-// 2. Record source detail 1 = PicallEx App Integration-Application
+// 2. Record source detail 1 = cualquiera de los orígenes PicallEx
 // + createdate dentro del rango seleccionado
 const BASE_FILTERS = [
   { propertyName: 'id_de_pauta_conversacion__picallex', operator: 'HAS_PROPERTY' },
-  { propertyName: 'hs_object_source_detail_1', operator: 'EQ', value: 'PicallEx App Integration-Application' }
+  { propertyName: 'hs_object_source_detail_1', operator: 'IN', values: PICALLEX_SOURCES }
 ];
+
+// Topes de seguridad de la paginación (HubSpot Search entrega 200 por página y
+// limita a ~5 req/s, así que un rango muy largo no cabe en el tiempo de ejecución
+// de la función). Al agotarse el presupuesto se devuelve lo obtenido con
+// truncated: true en vez de dejar que la función expire.
+const MAX_CONTACTS   = 10000;
+const TIME_BUDGET_MS = 7000;
 
 async function searchContacts(extraFilters = [], limit = 200, after = undefined) {
   const body = {
     filterGroups: [{
       filters: [...BASE_FILTERS, ...extraFilters]
     }],
-    properties: ['createdate', 'inmigration_status', 'id_de_pauta_conversacion__picallex'],
+    properties: ['createdate', 'inmigration_status'],
     limit,
     sorts: [{ propertyName: 'createdate', direction: 'ASCENDING' }]
   };
   if (after) body.after = after;
 
-  const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${HS_TOKEN}`,
-      'accept': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
+  // La Search API de HubSpot limita a ~5 req/s y recorrer un rango largo se acerca
+  // a ese tope, así que un 429 se reintenta con espera creciente.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${HS_TOKEN}`,
+        'accept': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`HubSpot ${res.status}: ${txt.substring(0, 400)}`);
+    if (res.status === 429 && attempt < 3) {
+      await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+      continue;
+    }
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HubSpot ${res.status}: ${txt.substring(0, 400)}`);
+    }
+
+    const json = await res.json();
+    if (json.status === 'error') throw new Error(json.message);
+    return json;
   }
-
-  const json = await res.json();
-  if (json.status === 'error') throw new Error(json.message);
-  return json;
 }
 
 exports.handler = async (event) => {
@@ -61,6 +84,7 @@ exports.handler = async (event) => {
 
   const { since, until } = event.queryStringParameters || {};
   if (!since || !until) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Faltan parámetros' }) };
+  if (!HS_TOKEN) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'Falta la variable de entorno HS_Token' }) };
 
   try {
     const sinceMs = new Date(since + 'T00:00:00').getTime();
@@ -73,6 +97,7 @@ exports.handler = async (event) => {
     ];
 
     // Obtener TODOS los contactos del rango con paginación
+    const deadline = Date.now() + TIME_BUDGET_MS;
     let allContacts = [];
     let after = undefined;
 
@@ -80,7 +105,9 @@ exports.handler = async (event) => {
       const json = await searchContacts(dateFilters, 200, after);
       allContacts = allContacts.concat(json.results || []);
       after = json.paging?.next?.after;
-    } while (after && allContacts.length < 2000);
+    } while (after && allContacts.length < MAX_CONTACTS && Date.now() < deadline);
+
+    const truncated = Boolean(after);
 
     const total = allContacts.length;
     let comercial = 0, p3 = 0, p5 = 0, vendido = 0;
@@ -112,6 +139,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         total,
         sumByDay,  // para debug — debe = total
+        truncated,   // true = el rango es tan largo que quedaron contactos sin leer
         quality: { comercial, p3, p5, vendido },
         byDay
       })

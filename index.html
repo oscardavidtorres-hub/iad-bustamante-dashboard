@@ -857,6 +857,10 @@ async function fetchAll(){
       state.hsContacts   = hsResult.value.total;
       state.qualityData  = hsResult.value.quality;
       state.hsByDay      = hsResult.value.byDay || {};
+      // El rango es tan amplio que HubSpot no alcanzó a devolverlo completo
+      if(hsResult.value.truncated){
+        showError('HubSpot: el rango es muy amplio y los datos están incompletos. Selecciona un período más corto (30 días o menos).');
+      }
     } else {
       showError('HubSpot API: ' + hsResult.reason);
     }
@@ -905,9 +909,10 @@ async function fetchHubSpotData(from, to){
   const json = await res.json();
   if(json.error) throw json.error;
   return {
-    total:   json.total   || 0,
-    quality: json.quality || { comercial:0, p3:0, p5:0, vendido:0 },
-    byDay:   json.byDay   || {}
+    total:     json.total   || 0,
+    quality:   json.quality || { comercial:0, p3:0, p5:0, vendido:0 },
+    byDay:     json.byDay   || {},
+    truncated: json.truncated === true
   };
 }
 
